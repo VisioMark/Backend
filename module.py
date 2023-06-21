@@ -8,12 +8,13 @@ class ImageProcessing:
     """
     This class has functions to perform image processing.
     """
-    def __init__(self, image_dir: str, output_dir: str, no_of_questions: int):
+    def __init__(self, image_dir: str, output_dir: str, no_of_questions: int, master_key):
         self.image_dir = image_dir
         self.output_dir = output_dir
         self.width = 1162
         self.height = 1600
         self.questions = no_of_questions
+        self.master_key = master_key
     
     def add_brightness(self, img: list):
         '''
@@ -23,7 +24,7 @@ class ImageProcessing:
         img = cv2.filter2D(img, -1, kernel)
         return img
     
-    def image_dir_to_array(self):
+    def image_dir_to_array(self, image_dir: str):
         """ Return a list of all names of files in folder path
         
         Returns:
@@ -36,7 +37,7 @@ class ImageProcessing:
         '''
         This function will check if the image is corrupted or not.
         '''
-        image_files = self.image_dir_to_array()
+        image_files = self.image_dir_to_array(image_dir=self.image_dir)
         for image_file in image_files:
             try:
                 img = cv2.imread(os.path.join(self.image_dir, image_file))
@@ -66,7 +67,7 @@ class ImageProcessing:
         return img, gray_img, cnts
 
     def image_preprocessing(self) -> list:        
-        image_files = self.image_dir_to_array()
+        image_files = self.image_dir_to_array(image_dir=self.image_dir)
         for image_file in image_files:
             img, gray_img, cnts = self.load_diff_images(image_file)
             img_big_contour = gray_img.copy()
@@ -158,7 +159,7 @@ class ImageProcessing:
             if count == 40:
                 break
 
-        
+        return 
             
             
             
