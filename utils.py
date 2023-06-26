@@ -1,7 +1,6 @@
-a = {}
+a = {"a": [1, 2, 3], "b": [4, 5, 6]}
 
-a = {'first': 2}
-a['second'] = 3
-
-
-print(a['first'])
+for _, value in a.items():
+    print(value)
+    for i in value:
+        print(i)
