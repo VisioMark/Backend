@@ -10,17 +10,18 @@ class ImageProcessing:
     """
     This class has functions to perform image processing.
     """
-    def __init__(self, image_dir: str, output_dir: str, no_of_questions: int, master_key):
+    def __init__(self, image_dir: str, no_of_questions: int, master_key: dict):
         self.image_dir = image_dir
-        self.output_dir = output_dir
         self.width = 1162
         self.height = 1600
         self.questions = no_of_questions
-        self.master_key =  {}
+        self.master_key =  master_key
+        
+        print(no_of_questions)
     
     def add_brightness(self, img: list):
         '''
-        This function will add brightness to the image.
+        This function will add brightness and sharpness filter to the image.
         '''
         kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
         img = cv2.filter2D(img, -1, kernel)
@@ -162,6 +163,8 @@ class ImageProcessing:
             r_delta = 0
             question = start_of_question
             for r in range(0, col_data.shape[0], 17):
+                if question >= self.questions + 1:
+                    break
                 x = 20
                 for c in range(0, col_data.shape[1], 200):
                     row = col_data[r + r_delta: r + r_delta + x, c: c + 200]
@@ -173,11 +176,9 @@ class ImageProcessing:
                         r_delta += 18
                     if count == 40:
                         break
-                # if count == 40:
-                #     break            
-            if count == 40:
-                print('breaked here')
-                break
+                if count == 40:
+                    break            
+           
 if __name__ == '__main__': 
-    image_processing = ImageProcessing(image_dir='test', output_dir='output', no_of_questions=80, master_key={})
+    image_processing = ImageProcessing(image_dir='test', no_of_questions=60, master_key={})
     image_processing.crop_rows(image_file='./test/001.jpg')
