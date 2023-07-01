@@ -6,8 +6,9 @@ def image_dir_to_array(image_dir: str):
     
     Returns:
         list: list of all names of images in folder path
-    """        
-    return [f for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f)) ]
+    """
+    for root, dirs, files in os.walk(image_dir):
+        return files
 
 def image_temp_dir():
     # Get the path of a temporary directory

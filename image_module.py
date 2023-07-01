@@ -4,7 +4,9 @@ import numpy as np
 import imutils
 from imutils.perspective import four_point_transform
 from dir_module import image_dir_to_array
-
+import tensorflow as tf
+from utils import make_predictions
+import time
 
 class ImageProcessing:
     """
@@ -19,7 +21,7 @@ class ImageProcessing:
         
         print(no_of_questions)
     
-    def add_brightness(self, img: list):
+    def add_brightness(self, img: np.ndarray):
         '''
         This function will add brightness and sharpness filter to the image.
         '''
@@ -28,20 +30,7 @@ class ImageProcessing:
         return img
     
    
-
-    def image_corruption_check(self):
-        '''
-        This function will check if the image is corrupted or not.
-        '''
-        image_files = image_dir_to_array(self.image_dir)
-        for image_file in image_files:
-            try:
-                img = cv2.imread(os.path.join(self.image_dir, image_file))
-                dummy = img.shape # this line will throw the exception
-            except:
-                print("[INFO] Image is not available or corrupted.")
-                print(os.path.join(self.image_dir, image_file))
-        print("[INFO] Image corruption check completed.")
+        
         
     def load_diff_images(self, image_file) :
         """this function helps you read, resize and grayscale your images
@@ -146,7 +135,7 @@ class ImageProcessing:
         print("[INFO] Cropping columns completed.")  
         return selected_columns
     
-    def crop_rows(self, image_file: str) -> None:
+    def get_questions_data(self, image_file: str) -> None:
         """this function helps you to crop the rows of the image
 
         Args:
@@ -154,9 +143,10 @@ class ImageProcessing:
         """        
         columns = self.crop_columns(image_file=image_file)
         print("[INFO] Cropping rows...")
-        output_folder = "output_folder"  # Set your desired output folder here
         
-        
+        prediction_list = {}
+        start_time = time.time()
+        questions_data = []
         for col_data, start_of_question in columns:
             # set the values
             count = 0
@@ -166,19 +156,28 @@ class ImageProcessing:
                 if question >= self.questions + 1:
                     break
                 x = 20
-                for c in range(0, col_data.shape[1], 200):
-                    row = col_data[r + r_delta: r + r_delta + x, c: c + 200]
-                    os.makedirs(output_folder, exist_ok=True)
-                    cv2.imwrite(f"{output_folder}/Question{question}.jpg", row)
-                    count += 1
-                    question += 1
-                    if count % 5 == 0: # Should jump r_delta times of pixels every 5th time
-                        r_delta += 18
-                    if count == 40:
-                        break
+                row = col_data[r + r_delta: r + r_delta + x, :]
+                resize = tf.image.resize(row, [130, 20])
+                questions_data.append(resize)
+
+                count += 1
+                question += 1
+                if count % 5 == 0: # Should jump r_delta times of pixels every 5th time
+                    r_delta += 18
                 if count == 40:
-                    break            
-           
+                    break
+
+        questions_data = np.array(questions_data)
+        return questions_data
+    
+    def predict_selections(self, image_file):
+        
+        predictions = make_predictions(questions)
+        prediction_list = {f"Q{id+1}": ans for id, ans in enumerate(predictions)}
+        # print(predictions)
+        end_time = time.time()
+        print("prediction_time: ", end_time - start_time, "seconds")           
+        print(prediction_list) 
 if __name__ == '__main__': 
-    image_processing = ImageProcessing(image_dir='test', no_of_questions=60, master_key={})
-    image_processing.crop_rows(image_file='./test/001.jpg')
+    image_processing = ImageProcessing(image_dir='test', no_of_questions=200, master_key={})
+    image_processing.crop_rows(image_file='./test/002.jpg')
