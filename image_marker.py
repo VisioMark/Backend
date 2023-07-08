@@ -7,16 +7,18 @@ from imutils.perspective import four_point_transform
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from utils import make_predictions
+import logging
+from fastapi import HTTPException, status
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 
 class ImageMarker:
-    def __init__(self, image_path: str, no_of_questions: int, master_key: dict) -> None:
+    def __init__(self, image_path: str, no_of_questions: str, master_key: dict) -> None:
         self.image_path = image_path
         self.width = 1162
         self.height = 1600
-        self.questions = no_of_questions
+        self.questions = int(no_of_questions)
         
     def add_brightness(self, img: np.ndarray):
         """Add brightness and sharpness filter to the image
@@ -39,14 +41,17 @@ class ImageMarker:
             gray_img: Grayscale image as a TensorFlow tensor
             cnts: Contours
         """
-        img = cv2.imread(image_path)
-        img = cv2.resize(img, (self.width, self.height))
-        gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        img_blur = cv2.GaussianBlur(gray_img, (3, 3), 0)
-        canny_img = cv2.Canny(img_blur, 75, 220)
-        cnts = cv2.findContours(canny_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        return img, gray_img, cnts
+        try:
+            img = cv2.imread(image_path)
+            img = cv2.resize(img, (self.width, self.height))
+            gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            img_blur = cv2.GaussianBlur(gray_img, (3, 3), 0)
+            canny_img = cv2.Canny(img_blur, 75, 220)
+            cnts = cv2.findContours(canny_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        except:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= "Image not found")
 
+        return img, gray_img, cnts
     def process_image(self, image_path: str) -> np.ndarray:
         """this function helps you to preprocess your images and get gets
         the biggest contour
@@ -83,6 +88,9 @@ class ImageMarker:
                 if len(approx) == 4:
                     docCnt = approx
                     break
+        else:
+            logging.error("No contours found.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= "Error occuring during image processing: finding contours")
 
         # apply a four point perspective transform to both the
         # original image and grayscale image to obtain a top-down
@@ -92,7 +100,7 @@ class ImageMarker:
         
         del img, gray_img, cnts, img_big_contour, docCnt, warped
 
-        print("[INFO] Image preprocessing completed.")
+        logging.info("Image preprocessing completed.")
 
         return paper
 
@@ -108,28 +116,52 @@ class ImageMarker:
         paper = self.process_image(image_path=image_path)
         print("[INFO] Cropping columns...")
         # Resize the image just to get rid of the black border
-        resize = paper[30 : paper.shape[0] - 25, 39 : paper.shape[1] - 33]
+        try:
+            resize = paper[30 : paper.shape[0] - 25, 39 : paper.shape[1] - 33]
+        except:
+            logging.error("Could not resize the big contour image.")
+            raise Exception("Image not found")
 
         selected_columns = []
 
         # Cropping the image into 5 columns
-        if self.questions >= 1 or self.questions >= 40:
-            first_col = resize[0 : resize.shape[0], 35:172]
-            selected_columns.append((first_col, 1))
-        if self.questions >= 41 or self.questions >= 80:
-            second_col = resize[0 : resize.shape[0], 225:367]
-            selected_columns.append((second_col, 41))
-        if self.questions >= 81 or self.questions >= 120:
-            third_col = resize[0 : resize.shape[0], 420:560]
-            selected_columns.append((third_col, 81))
-        if self.questions >= 121 or self.questions >= 160:
-            fourth_col = resize[0 : resize.shape[0], 610:755]
-            selected_columns.append((fourth_col, 121))
-        if self.questions >= 161 or self.questions >= 200:
-            fifth_col = resize[0 : resize.shape[0], 810:1100]
-            selected_columns.append((fifth_col, 161))
+        try:
+            if self.questions >= 1 or self.questions >= 40:
+                first_col = resize[0 : resize.shape[0], 35:172]
+                selected_columns.append((first_col, 1))
+        except:
+            logging.error('Could not crop the first column')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the first column")
+        try:
+            if self.questions >= 41 or self.questions >= 80:
+                second_col = resize[0 : resize.shape[0], 225:367]
+                selected_columns.append((second_col, 41))
+        except:
+            logging.error('Could not crop the second column')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the second column")
+        try:
+            if self.questions >= 81 or self.questions >= 120:
+                third_col = resize[0 : resize.shape[0], 420:560]
+                selected_columns.append((third_col, 81))
+        except:
+            logging.error('Could not crop the third column')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the third column")
+        try:
+            if self.questions >= 121 or self.questions >= 160:
+                fourth_col = resize[0 : resize.shape[0], 610:755]
+                selected_columns.append((fourth_col, 121))
+        except:
+            logging.error('Could not crop the fourth column')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the fourth column")
+        try:
+            if self.questions >= 161 or self.questions >= 200:
+                fifth_col = resize[0 : resize.shape[0], 810:1100]
+                selected_columns.append((fifth_col, 161))
+        except:
+            logging.error('Could not crop the fifth column')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the fifth column")
 
-        print("[INFO] Cropping columns completed.")
+        logging.info("Cropping columns completed.")
         
 
         return selected_columns
@@ -141,7 +173,7 @@ class ImageMarker:
             image_file (array): path of the image
         """
         columns = self.get_cropped_columns(image_path=image_path)
-        print("[INFO] Cropping rows...")
+        logging.info("Cropping rows...")
 
         questions_data = []
         for col_data, start_of_question in columns:

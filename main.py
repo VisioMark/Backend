@@ -1,19 +1,29 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 import pydantic
 from __pred_methods__ import multiprocessing_predictions, serial_predictions
 from dir_module import image_dir_to_array
 import tensorflow as tf
 import cv2
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+
 
 app = FastAPI()
-model = tf.keras.models.load_model("saved_models/model_1.h5")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=['GET', 'POST'],
+    allow_headers=["*"],
+)
+
+# Configure the root logger
+logging.basicConfig(level=logging.INFO)  # Set the desired log level
 
 class ImageProcessingModel(pydantic.BaseModel):
     image_dir: str
-    no_of_questions: int = 40
-    master_key: dict = None
+    no_of_questions: str = '40'
 
 
 @app.get("/")
@@ -27,30 +37,45 @@ def image_corruption_check(image_dir):
     Args:
         image_dir (str): The path of the image directory
     """    
+    
+     # Validate the directory path
+    if not os.path.isdir(image_dir):
+        error_detail = f"Invalid directory path: `{image_dir}`"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= error_detail)
+    
     image_files = image_dir_to_array(image_dir)
     for image_file in image_files:
         try:
             img = cv2.imread(os.path.join(image_dir, image_file))
             dummy = img.shape  # this line will throw the exception
         except:
-            print("[INFO] Image is not available or corrupted.")
+            logging.error(" Image is not available or corrupted.")
             print(os.path.join(image_dir, image_file))
-    print("[INFO] Image corruption check completed.")
+    logging.info("Image corruption check completed.")
     
     
 @app.post("/predict")
 async def predict_score(ipm: ImageProcessingModel):
-    # image_corruption_check(ipm.image_dir)
+    image_corruption_check(ipm.image_dir)
+    
+     # Validate the directory path
+    if not os.path.isdir(ipm.image_dir):
+        error_detail = f"Invalid directory path: `{ipm.image_dir}`"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= error_detail)
     
     image_file_names = image_dir_to_array(image_dir=ipm.image_dir)
     print(image_file_names)
     
     if len(image_file_names) <= 10:
+        logging.info("Serial predictions started.")
         response = serial_predictions(ipm, image_file_names)
     
     if len(image_file_names) > 10:
+        logging.info("Multiprocessing predictions started.")
         response = multiprocessing_predictions(ipm, image_file_names)
     
+    if len(image_file_names) == 0:
+        raise HTTPException(status_code=status.HTTP_200_SUCCESS, detail= "No images found in the directory.")
     
     return response
 
