@@ -1,14 +1,10 @@
 import os
 from fastapi import FastAPI
 import pydantic
-from image_marker import ImageMarker
+from __pred_methods__ import multiprocessing_predictions, serial_predictions
 from dir_module import image_dir_to_array
 import tensorflow as tf
-import numpy as np
 import cv2
-import time
-import multiprocessing
-
 
 app = FastAPI()
 model = tf.keras.models.load_model("saved_models/model_1.h5")
@@ -26,9 +22,11 @@ def read_root():
 
 
 def image_corruption_check(image_dir):
-    """
-    This function will check if the image is corrupted or not.
-    """
+    """This function will check if the image is corrupted or not.
+
+    Args:
+        image_dir (str): The path of the image directory
+    """    
     image_files = image_dir_to_array(image_dir)
     for image_file in image_files:
         try:
@@ -38,40 +36,27 @@ def image_corruption_check(image_dir):
             print("[INFO] Image is not available or corrupted.")
             print(os.path.join(image_dir, image_file))
     print("[INFO] Image corruption check completed.")
-
-
-def process_image(name, ipm):
-    image_path = os.path.join(ipm.image_dir, name)
-    image_marker = ImageMarker(
-        image_path=image_path, no_of_questions=ipm.no_of_questions, master_key={}
-    )
-
-    start_time = time.time()
-    predictions = image_marker.predict_selections()
-    end_time = time.time()
-
-    print(f"time taken to predict {name}: {end_time - start_time}")
-
-    return name, predictions
-
+    
+    
 @app.post("/predict")
 async def predict_score(ipm: ImageProcessingModel):
-    image_corruption_check(ipm.image_dir)
-
+    # image_corruption_check(ipm.image_dir)
+    
     image_file_names = image_dir_to_array(image_dir=ipm.image_dir)
     print(image_file_names)
-
-    response = {}
-
-    with multiprocessing.Pool() as pool:
-        # Map image processing tasks to the pool of worker processes
-        results = pool.starmap(process_image, [(name, ipm) for name in image_file_names])
-
-        # Process the results
-        for name, predictions in results:
-            response[name] = predictions
-
+    
+    if len(image_file_names) <= 10:
+        response = serial_predictions(ipm, image_file_names)
+    
+    if len(image_file_names) > 10:
+        response = multiprocessing_predictions(ipm, image_file_names)
+    
+    
     return response
+
+
+
+
 
     # image_processing = ImageProcessing(
     #     image_dir=ipm.image_dir,

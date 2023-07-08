@@ -1,12 +1,14 @@
 import os
 from typing import Dict
-
 import cv2
 import numpy as np
 import imutils
 from imutils.perspective import four_point_transform
 import tensorflow as tf
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from utils import make_predictions
+
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 
 class ImageMarker:
@@ -15,7 +17,7 @@ class ImageMarker:
         self.width = 1162
         self.height = 1600
         self.questions = no_of_questions
-
+        
     def add_brightness(self, img: np.ndarray):
         """Add brightness and sharpness filter to the image
 
@@ -27,14 +29,14 @@ class ImageMarker:
         return img
 
     def load_diff_images(self, image_path):
-        """this function helps you read, resize and grayscale your images
+        """This function helps you read, resize, and grayscale your images using TensorFlow
 
         Args:
-            image_file (image_file): image to be read
+            image_path (str): Path of the image to be read
 
         Returns:
-            img: Original image
-            gray_img: Grayscale image
+            img: Original image as a TensorFlow tensor
+            gray_img: Grayscale image as a TensorFlow tensor
             cnts: Contours
         """
         img = cv2.imread(image_path)
@@ -87,6 +89,8 @@ class ImageMarker:
         # view of the document
         paper = four_point_transform(img, docCnt.reshape(4, 2))
         warped = four_point_transform(gray_img, docCnt.reshape(4, 2))
+        
+        del img, gray_img, cnts, img_big_contour, docCnt, warped
 
         print("[INFO] Image preprocessing completed.")
 
@@ -126,6 +130,7 @@ class ImageMarker:
             selected_columns.append((fifth_col, 161))
 
         print("[INFO] Cropping columns completed.")
+        
 
         return selected_columns
 
