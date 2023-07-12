@@ -50,12 +50,12 @@ def serial_predictions(ipm, image_file_names):
     Returns:
         dict: A dictionary of the response
     """    
-    response = {}
+    results = []
 
     for name in image_file_names:
         image_path = os.path.join(ipm.image_dir, name)
         image_marker = ImageMarker(
-            image_path=image_path, no_of_questions=ipm.no_of_questions, master_key={}
+            image_path=image_path, no_of_questions=ipm.no_of_questions, master_key=ipm.master_key
         )
 
         start_timee = time.time()
@@ -63,10 +63,10 @@ def serial_predictions(ipm, image_file_names):
         end_time = time.time()
 
         print(f"time taken to predict {name}: {end_time - start_timee}")
+        
+        results.append(predictions)
 
-        response[name] = predictions
-
-    return response
+    return results
 
 
 # using asyncio to speed up the process

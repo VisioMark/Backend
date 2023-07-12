@@ -1,14 +1,14 @@
 import os
-from typing import Dict
+import logging
+import tensorflow as tf
 import cv2
 import numpy as np
 import imutils
-from imutils.perspective import four_point_transform
-import tensorflow as tf
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
-from utils import make_predictions
-import logging
+from typing import Dict
 from fastapi import HTTPException, status
+from imutils.perspective import four_point_transform
+from utils import make_predictions, mark_predictions
+from __img_utils__ import load_diff_images, get_n_columns, find_contours, get_all_cropped_index_number
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
@@ -19,40 +19,18 @@ class ImageMarker:
         self.width = 1162
         self.height = 1600
         self.questions = int(no_of_questions)
+        self.master_key = master_key
         
-    def add_brightness(self, img: np.ndarray):
-        """Add brightness and sharpness filter to the image
-
-        Args:
-            img (np.ndarray): _description_
-        """
-        kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-        img = cv2.filter2D(img, -1, kernel)
-        return img
-
-    def load_diff_images(self, image_path):
-        """This function helps you read, resize, and grayscale your images using TensorFlow
-
-        Args:
-            image_path (str): Path of the image to be read
+    def start_processing(self) -> tuple([np.ndarray, np.ndarray, np.ndarray]):
+        """This function starts the processing of the image
 
         Returns:
-            img: Original image as a TensorFlow tensor
-            gray_img: Grayscale image as a TensorFlow tensor
-            cnts: Contours
+            img, gray_img, canny_img: Original image, Grayscale image, Canny image
         """
-        try:
-            img = cv2.imread(image_path)
-            img = cv2.resize(img, (self.width, self.height))
-            gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            img_blur = cv2.GaussianBlur(gray_img, (3, 3), 0)
-            canny_img = cv2.Canny(img_blur, 75, 220)
-            cnts = cv2.findContours(canny_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        except:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= "Image not found")
-
-        return img, gray_img, cnts
-    def process_image(self, image_path: str) -> np.ndarray:
+        diff_images = load_diff_images(image_path=self.image_path, width=self.width, height=self.height)
+        return diff_images
+    
+    def process_image_for_shading(self,diff_images) -> np.ndarray:
         """this function helps you to preprocess your images and get gets
         the biggest contour
 
@@ -63,13 +41,17 @@ class ImageMarker:
             paper: an array of the biggest contour
         """
 
-        img, gray_img, cnts = self.load_diff_images(image_path=image_path)
+        img , gray_img, canny_img = diff_images
         img_big_contour = gray_img.copy()
 
-        self.add_brightness(img_big_contour)
-
-        cnts = imutils.grab_contours(cnts)
-        docCnt = None
+        cnts = find_contours(canny_img)
+        try:
+            cnts = imutils.grab_contours(cnts)
+        except:
+            logging.error("Could not grab contours.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= "Error occuring during image processing: grabbing contours")
+        
+        doc_cnt = None
 
         # ensure that at least one contour was found
         if len(cnts) > 0:
@@ -86,7 +68,7 @@ class ImageMarker:
                 # if our approximated contour has four points,
                 # then we can assume we have found the shaded area
                 if len(approx) == 4:
-                    docCnt = approx
+                    doc_cnt = approx
                     break
         else:
             logging.error("No contours found.")
@@ -95,84 +77,155 @@ class ImageMarker:
         # apply a four point perspective transform to both the
         # original image and grayscale image to obtain a top-down
         # view of the document
-        paper = four_point_transform(img, docCnt.reshape(4, 2))
-        warped = four_point_transform(gray_img, docCnt.reshape(4, 2))
+        paper = four_point_transform(img, doc_cnt.reshape(4, 2))
+        warped = four_point_transform(gray_img, doc_cnt.reshape(4, 2))
         
-        del img, gray_img, cnts, img_big_contour, docCnt, warped
+        del gray_img, cnts, img_big_contour, doc_cnt, warped
 
         logging.info("Image preprocessing completed.")
 
         return paper
-
-    def get_cropped_columns(self, image_path: str) -> list:
-        """This function helps you to crop the columns of the image
+                  
+    def get_index_no(self, diff_images) -> np.ndarray:
+        """This function gets a canny(ied) image and processes it to get the section
+        for the index number.
 
         Args:
-            image_file (str): Takes the path of the image from the crop_rows function
+            img (np.ndarray): Canny image
+        """        
+        img, gray_img, canny_img = diff_images
+       
+        print(img.shape)
+        
+        # Resize the original image to get just the area around the index number.
+        resized_img = img[10:img.shape[0]//3, 30:img.shape[1]//3]
+
+        contours, hierarchy = cv2.findContours(canny_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+        guided_image = resized_img.copy()
+
+        biggest_cnt = None
+        for cnt in range(0, len(contours)):
+            if cv2.contourArea(contours[cnt]) > 1000:
+                biggest_cnt = cnt
+                cv2.drawContours(guided_image, contours, cnt, (255, 0, 0), 10)
+
+        cnt = contours[biggest_cnt]
+        
+        cv2.imshow("asdf", guided_image)   
+        cv2.waitKey(0)
+
+        # Close the window.
+        cv2.destroyAllWindows()
+        
+        # Find the bounding rectangle of the contour
+        x, y, w, h = cv2.boundingRect(cnt)
+
+        # Crop the image based on the contour
+        idxno_image = resized_img[y:y+h, x:x+w]
+
+
+        # REMOVE [n] PIXELS FORM EACH SIDE
+        resized_image = idxno_image[80:155, 125:idxno_image.shape[1] - 4]
+        
+        combined_images = get_all_cropped_index_number(resized_image=resized_image)
+        print("combined: ",combined_images)
+        imgs = np.apply_along_axis(self.preprocess_idx_img, 1, combined_images)
+        # img = np.invert(resized_image)
+        # plt.imshow(img, cmap='gray')
+        # Reshape and normalize the image
+        # img = np.expand_dims(img, axis=-1)  # Add an extra axis for the single channel
+        # img = np.expand_dims(img, axis=0)  # Add batch dimension
+        # img = np.apply_along_axis(lambda img: img/255.0, 1, imgs)
+        # # img = img / 255.0  # Normalize the pixel values
+
+        # # Resize the image using tf.image.resize
+        # img = tf.image.resize(img, [28, 28])
+        print("imgs oo",imgs)
+        return imgs
+        
+    def preprocess_idx_img(self, img:np.ndarray) -> np.ndarray:
+        """This function helps you to preprocess the index number image
+
+        Args:
+            img (np.ndarray): The index number image
+
+        Returns:
+            np.ndarray: The preprocessed index number image
+        """
+        img = np.invert(resized_image)
+        img = img / 255.0  # Normalize the pixel values
+
+        # Resize the image using tf.image.resize
+        img = tf.image.resize(img, [28, 28])
+        return img
+    
+
+    def get_cropped_columns(self, diff_images) -> list:
+        """This function helps you to crop the columns of the image
 
         Returns:
             list[(list, int)]: returns a list of tuples of the cropped columns with the start_question_number
         """
-        paper = self.process_image(image_path=image_path)
+        paper = self.process_image_for_shading(diff_images=diff_images)
         print("[INFO] Cropping columns...")
         # Resize the image just to get rid of the black border
         try:
             resize = paper[30 : paper.shape[0] - 25, 39 : paper.shape[1] - 33]
-        except:
-            logging.error("Could not resize the big contour image.")
-            raise Exception("Image not found")
+        except Exception as exc:
+            logging.error(f"Could not resize the big contour image.- error: {exc}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= "Error occuring during image processing: resizing image")
+        
+        
+        selected_columns = get_n_columns(questions=self.questions, resized_img=resize)
+        # selected_columns = []
 
-        selected_columns = []
+        # # Cropping the image into 5 columns
+        # try:
+        #     if self.questions >= 1 or self.questions >= 40:
+        #         first_col = resize[0 : resize.shape[0], 35:172]
+        #         selected_columns.append((first_col, 1))
+        # except:
+        #     logging.error('Could not crop the first column')
+        #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the first column")
+        # try:
+        #     if self.questions >= 41 or self.questions >= 80:
+        #         second_col = resize[0 : resize.shape[0], 225:367]
+        #         selected_columns.append((second_col, 41))
+        # except:
+        #     logging.error('Could not crop the second column')
+        #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the second column")
+        # try:
+        #     if self.questions >= 81 or self.questions >= 120:
+        #         third_col = resize[0 : resize.shape[0], 420:560]
+        #         selected_columns.append((third_col, 81))
+        # except:
+        #     logging.error('Could not crop the third column')
+        #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the third column")
+        # try:
+        #     if self.questions >= 121 or self.questions >= 160:
+        #         fourth_col = resize[0 : resize.shape[0], 610:755]
+        #         selected_columns.append((fourth_col, 121))
+        # except:
+        #     logging.error('Could not crop the fourth column')
+        #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the fourth column")
+        # try:
+        #     if self.questions >= 161 or self.questions >= 200:
+        #         fifth_col = resize[0 : resize.shape[0], 810:1100]
+        #         selected_columns.append((fifth_col, 161))
+        # except:
+        #     logging.error('Could not crop the fifth column')
+        #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the fifth column")
 
-        # Cropping the image into 5 columns
-        try:
-            if self.questions >= 1 or self.questions >= 40:
-                first_col = resize[0 : resize.shape[0], 35:172]
-                selected_columns.append((first_col, 1))
-        except:
-            logging.error('Could not crop the first column')
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the first column")
-        try:
-            if self.questions >= 41 or self.questions >= 80:
-                second_col = resize[0 : resize.shape[0], 225:367]
-                selected_columns.append((second_col, 41))
-        except:
-            logging.error('Could not crop the second column')
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the second column")
-        try:
-            if self.questions >= 81 or self.questions >= 120:
-                third_col = resize[0 : resize.shape[0], 420:560]
-                selected_columns.append((third_col, 81))
-        except:
-            logging.error('Could not crop the third column')
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the third column")
-        try:
-            if self.questions >= 121 or self.questions >= 160:
-                fourth_col = resize[0 : resize.shape[0], 610:755]
-                selected_columns.append((fourth_col, 121))
-        except:
-            logging.error('Could not crop the fourth column')
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the fourth column")
-        try:
-            if self.questions >= 161 or self.questions >= 200:
-                fifth_col = resize[0 : resize.shape[0], 810:1100]
-                selected_columns.append((fifth_col, 161))
-        except:
-            logging.error('Could not crop the fifth column')
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not crop the fifth column")
-
-        logging.info("Cropping columns completed.")
+        # logging.info("Cropping columns completed.")
         
 
         return selected_columns
 
-    def get_questions_data(self, image_path: str) -> None:
+    def get_questions_data(self, diff_images ) -> np.ndarray:
         """this function helps you to crop the rows of the image
-
-        Args:
-            image_file (array): path of the image
         """
-        columns = self.get_cropped_columns(image_path=image_path)
+        columns = self.get_cropped_columns(diff_images=diff_images)
         logging.info("Cropping rows...")
 
         questions_data = []
@@ -197,12 +250,29 @@ class ImageMarker:
                     break
 
         questions_data = np.array(questions_data)
+        
         return questions_data
+    
+    
 
     def predict_selections(self) -> Dict[int, str]:
-        question_data = self.get_questions_data(self.image_path)
-        predictions = make_predictions(question_data)
+        """This function helps you to make predictions
+
+        Returns:
+            Dict[int, str]: returns a dictionary of the file name, predictions and score
+        """
+        diff_images = self.start_processing()
+        question_data = self.get_questions_data(diff_images=diff_images)
+        index_number = self.get_index_no(diff_images=diff_images)
+        
+        predictions = make_predictions(shading_arr=question_data, idx_num_arr=index_number )
         results = {
             id + 1: predicted_label for id, predicted_label in enumerate(predictions)
         }
-        return results
+        score = mark_predictions(results, self.master_key)
+        accum_result = {
+            "file_name": (self.image_path).split('/')[-1],
+            'predictions': results,
+            "score": score
+        }
+        return accum_result

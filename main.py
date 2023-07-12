@@ -7,6 +7,7 @@ import tensorflow as tf
 import cv2
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+from utils import save_response_to_csv, a
 
 
 app = FastAPI()
@@ -23,7 +24,8 @@ logging.basicConfig(level=logging.INFO)  # Set the desired log level
 
 class ImageProcessingModel(pydantic.BaseModel):
     image_dir: str
-    no_of_questions: str = '40'
+    no_of_questions: str = '40',
+    master_key: dict = {}
 
 
 @app.get("/")
@@ -56,7 +58,8 @@ def image_corruption_check(image_dir):
     
 @app.post("/predict")
 async def predict_score(ipm: ImageProcessingModel):
-    image_corruption_check(ipm.image_dir)
+    # image_corruption_check(ipm.image_dir)
+    print(ipm.image_dir)
     
      # Validate the directory path
     if not os.path.isdir(ipm.image_dir):
@@ -66,16 +69,18 @@ async def predict_score(ipm: ImageProcessingModel):
     image_file_names = image_dir_to_array(image_dir=ipm.image_dir)
     print(image_file_names)
     
-    if len(image_file_names) <= 10:
+    if len(image_file_names):
         logging.info("Serial predictions started.")
         response = serial_predictions(ipm, image_file_names)
     
-    if len(image_file_names) > 10:
-        logging.info("Multiprocessing predictions started.")
-        response = multiprocessing_predictions(ipm, image_file_names)
+    # if len(image_file_names) > 10:
+    #     logging.info("Multiprocessing predictions started.")
+    #     response = multiprocessing_predictions(ipm, image_file_names)
     
     if len(image_file_names) == 0:
         raise HTTPException(status_code=status.HTTP_200_SUCCESS, detail= "No images found in the directory.")
+    
+    a(response_data=response)
     
     return response
 
