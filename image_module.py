@@ -5,7 +5,7 @@ import imutils
 from imutils.perspective import four_point_transform
 from dir_module import image_dir_to_array
 import tensorflow as tf
-from utils import make_predictions
+from helpers.utils import make_predictions
 import time
 
 class ImageProcessing:

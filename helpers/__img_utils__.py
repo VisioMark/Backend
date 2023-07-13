@@ -15,7 +15,7 @@ def add_brightness(img: np.ndarray):
     return img
 
 
-def load_diff_images(image_path, width, height):
+def load_diff_images_for_shading(image_path, width, height):
     """This function helps you read, resize, and grayscale your images using TensorFlow
 
     Args:
@@ -39,6 +39,32 @@ def load_diff_images(image_path, width, height):
         )
 
     return img, gray_img, canny_img
+
+def load_diff_images_for_idx_no(image_path, width, height):
+    """This function helps you read, resize, and grayscale your images using TensorFlow
+
+    Args:
+        image_path (str): Path of the image to be read
+
+    Returns:
+        img: Original image as a TensorFlow tensor
+        gray_img: Grayscale image as a TensorFlow tensor
+        cnts: Contours
+    """
+    try:
+        img = cv2.imread(image_path)
+        img = cv2.resize(img, (width, height))
+        img = add_brightness(img)
+        resized_img = img[10:img.shape[0]//3, 30:img.shape[1]//3]
+        gray_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2GRAY)
+        img_blur = cv2.GaussianBlur(gray_img, (5, 5), 1)
+        canny_img = cv2.Canny(img_blur, 10, 70)
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Image not found"
+        )
+
+    return img, gray_img, canny_img, resized_img
 
 
 def find_contours(img: np.ndarray):

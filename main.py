@@ -1,13 +1,13 @@
 import os
 from fastapi import FastAPI, HTTPException, status
 import pydantic
-from __pred_methods__ import multiprocessing_predictions, serial_predictions
+from helpers.__pred_methods__ import multiprocessing_predictions, serial_predictions
 from dir_module import image_dir_to_array
 import tensorflow as tf
 import cv2
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-from utils import save_response_to_csv, a
+from helpers.utils import save_response_to_csv, a
 
 
 app = FastAPI()

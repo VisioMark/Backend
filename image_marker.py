@@ -7,8 +7,8 @@ import imutils
 from typing import Dict
 from fastapi import HTTPException, status
 from imutils.perspective import four_point_transform
-from utils import make_predictions, mark_predictions
-from __img_utils__ import load_diff_images, get_n_columns, find_contours, get_all_cropped_index_number
+from helpers.utils import make_predictions, mark_predictions
+from helpers.__img_utils__ import load_diff_images_for_idx_no, load_diff_images_for_shading , get_n_columns, find_contours, get_all_cropped_index_number
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
@@ -21,14 +21,27 @@ class ImageMarker:
         self.questions = int(no_of_questions)
         self.master_key = master_key
         
-    def start_processing(self) -> tuple([np.ndarray, np.ndarray, np.ndarray]):
+    def start_shading_processing(self) -> tuple([np.ndarray, np.ndarray, np.ndarray]):
         """This function starts the processing of the image
 
         Returns:
             img, gray_img, canny_img: Original image, Grayscale image, Canny image
         """
-        diff_images = load_diff_images(image_path=self.image_path, width=self.width, height=self.height)
-        return diff_images
+        diff_images_for_shading = load_diff_images_for_shading(image_path=self.image_path, width=self.width, height=self.height)
+        
+        
+        return diff_images_for_shading
+    
+    def start_indx_processing(self) -> tuple([np.ndarray, np.ndarray, np.ndarray]):
+        """This function starts the processing of the image
+
+        Returns:
+            img, gray_img, canny_img: Original image, Grayscale image, Canny image
+        """
+        diff_images_for_idx = load_diff_images_for_idx_no(image_path=self.image_path, width=self.width, height=self.height)
+        
+        
+        return diff_images_for_idx
     
     def process_image_for_shading(self,diff_images) -> np.ndarray:
         """this function helps you to preprocess your images and get gets
@@ -93,30 +106,23 @@ class ImageMarker:
         Args:
             img (np.ndarray): Canny image
         """        
-        img, gray_img, canny_img = diff_images
-       
-        print(img.shape)
-        
-        # Resize the original image to get just the area around the index number.
-        resized_img = img[10:img.shape[0]//3, 30:img.shape[1]//3]
+        img, gray_img, canny_img, resized_img = diff_images
+               
+        # # Resize the original image to get just the area around the index number.
+        # resized_img = img[10:img.shape[0]//3, 30:img.shape[1]//3]
 
-        contours, hierarchy = cv2.findContours(canny_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        contours = find_contours(canny_img)[0]
 
         guided_image = resized_img.copy()
 
         biggest_cnt = None
         for cnt in range(0, len(contours)):
             if cv2.contourArea(contours[cnt]) > 1000:
+                print(cv2.contourArea(contours[cnt]))
                 biggest_cnt = cnt
                 cv2.drawContours(guided_image, contours, cnt, (255, 0, 0), 10)
 
         cnt = contours[biggest_cnt]
-        
-        cv2.imshow("asdf", guided_image)   
-        cv2.waitKey(0)
-
-        # Close the window.
-        cv2.destroyAllWindows()
         
         # Find the bounding rectangle of the contour
         x, y, w, h = cv2.boundingRect(cnt)
@@ -129,8 +135,7 @@ class ImageMarker:
         resized_image = idxno_image[80:155, 125:idxno_image.shape[1] - 4]
         
         combined_images = get_all_cropped_index_number(resized_image=resized_image)
-        print("combined: ",combined_images)
-        imgs = np.apply_along_axis(self.preprocess_idx_img, 1, combined_images)
+        imgs = np.array([self.preprocess_idx_img(img) for img in combined_images])
         # img = np.invert(resized_image)
         # plt.imshow(img, cmap='gray')
         # Reshape and normalize the image
@@ -141,7 +146,6 @@ class ImageMarker:
 
         # # Resize the image using tf.image.resize
         # img = tf.image.resize(img, [28, 28])
-        print("imgs oo",imgs)
         return imgs
         
     def preprocess_idx_img(self, img:np.ndarray) -> np.ndarray:
@@ -153,8 +157,13 @@ class ImageMarker:
         Returns:
             np.ndarray: The preprocessed index number image
         """
-        img = np.invert(resized_image)
-        img = img / 255.0  # Normalize the pixel values
+        if img.size == 0:
+            raise ValueError("Empty image provided.")
+        img = np.invert(img)
+        img = img.astype(np.float32) / 255.0  # Normalize the pixel values
+
+        if img.shape[0] == 0 or img.shape[1] == 0:
+            raise ValueError("Invalid image dimensions.")
 
         # Resize the image using tf.image.resize
         img = tf.image.resize(img, [28, 28])
@@ -261,9 +270,11 @@ class ImageMarker:
         Returns:
             Dict[int, str]: returns a dictionary of the file name, predictions and score
         """
-        diff_images = self.start_processing()
+        diff_images = self.start_shading_processing()
         question_data = self.get_questions_data(diff_images=diff_images)
-        index_number = self.get_index_no(diff_images=diff_images)
+        
+        idx_diff_images = self.start_indx_processing()
+        index_number = self.get_index_no(diff_images=idx_diff_images)
         
         predictions = make_predictions(shading_arr=question_data, idx_num_arr=index_number )
         results = {
