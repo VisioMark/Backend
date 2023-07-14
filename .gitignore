@@ -3,6 +3,4 @@ venv
 cifar.ipynb
 __pycache__/
 output_csv
-col_idx
 .vscode
-Double
