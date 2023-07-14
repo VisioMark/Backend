@@ -26,16 +26,15 @@ def make_predictions(shading_arr: np.ndarray, idx_num_arr: np.ndarray) -> Dict[i
     # arr = np.apply_along_axis(lambda x: np.expand_dims(x, axis=0), 1, arr)
     # load the model
     try:
-        shading_model = tf.keras.models.load_model("saved_models/model_2.h5")
-        idx_num_model = tf.keras.models.load_model("idx_models/idx_model_0.h5")
+        shading_model = tf.keras.models.load_model("models/saved_models/model_2.h5")
+        idx_num_model = tf.keras.models.load_model("models/idx_models/idx_model_0.h5")
     except:
         logging.error("Model not found")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= "Model not found")
     # predictions = shading_model.predict(np.expand_dims(arr/255, axis=0))
     shading_prediction = shading_model.predict(shading_arr)
-    print("4334", idx_num_arr)
     idx_num_prediction = idx_num_model.predict(idx_num_arr)
-    print(idx_num_prediction)
+    print(np.apply_along_axis(tf.argmax, 1, idx_num_prediction))
     labels = process_predictions(shading_prediction)
     return labels
 

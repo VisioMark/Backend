@@ -1,7 +1,11 @@
+import os
 import numpy as np
 import cv2
 from fastapi import HTTPException, status
 import logging
+from typing import Tuple
+from helpers.dir_module import image_dir_to_array
+
 
 
 def add_brightness(img: np.ndarray):
@@ -15,7 +19,7 @@ def add_brightness(img: np.ndarray):
     return img
 
 
-def load_diff_images_for_shading(image_path, width, height):
+def load_diff_images_for_shading(image_path, width, height) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """This function helps you read, resize, and grayscale your images using TensorFlow
 
     Args:
@@ -40,7 +44,7 @@ def load_diff_images_for_shading(image_path, width, height):
 
     return img, gray_img, canny_img
 
-def load_diff_images_for_idx_no(image_path, width, height):
+def load_diff_images_for_idx_no(image_path: str, width:int, height:int)-> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """This function helps you read, resize, and grayscale your images using TensorFlow
 
     Args:
@@ -64,17 +68,17 @@ def load_diff_images_for_idx_no(image_path, width, height):
             status_code=status.HTTP_400_BAD_REQUEST, detail="Image not found"
         )
 
-    return img, gray_img, canny_img, resized_img
+    return img, gray_img, canny_img
 
 
-def find_contours(img: np.ndarray):
+def find_contours(img: np.ndarray)->np.ndarray:
     """This function helps you to find the contours of the image
 
     Args:
         img (np.ndarray): Grayscale image as a TensorFlow tensor
 
     Returns:
-        cnts: Contours
+        cnts (np.nparray): Contours
     """
     try:
         cnts = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -147,26 +151,63 @@ def get_n_columns(questions: int, resized_img: np.ndarray):
 
 
 def get_all_cropped_index_number(resized_image: np.ndarray):
+    if resized_image.size == 0:
+        logging.error("Error with the resized image of the index number.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Error with resized image"
+        )
     combined_images = []
-    firstCol = resized_image[3 : resized_image.shape[0] - 3, 3:55]
-    combined_images.append(firstCol)
-    secondCol = resized_image[3 : resized_image.shape[0] - 3, 63:115]
-    combined_images.append(secondCol)
+    first_num = resized_image[3 : resized_image.shape[0] - 3, 3:55]
+    first_num = cv2.resize(first_num, (28, 28))
+    combined_images.append(first_num)
+    
+    second_num = resized_image[3 : resized_image.shape[0] - 3, 63:115]
+    second_num = cv2.resize(second_num, (28, 28))
+    combined_images.append(second_num)
 
-    thirdCol = resized_image[3 : resized_image.shape[0] - 3, 125:180]
-    combined_images.append(thirdCol)
+    third_num = resized_image[3 : resized_image.shape[0] - 3, 125:180]
+    third_num = cv2.resize(third_num, (28, 28))
+    combined_images.append(third_num)
 
-    fourthCol = resized_image[3 : resized_image.shape[0] - 3, 185:240]
-    print("fourth", fourthCol)
-    combined_images.append(fourthCol)
+    fourth_num = resized_image[3 : resized_image.shape[0] - 3, 185:240]
+    fourth_num = cv2.resize(fourth_num, (28, 28))
+    combined_images.append(fourth_num)
 
-    fifthCol = resized_image[3 : resized_image.shape[0] - 3, 248:300]
-    combined_images.append(fifthCol)
+    fifth_col = resized_image[3 : resized_image.shape[0] - 3, 248:300]
+    fifth_col = cv2.resize(fifth_col, (28, 28))
+    combined_images.append(fifth_col)
 
-    sixthCol = resized_image[3 : resized_image.shape[0] - 3, 310:360]
-    combined_images.append(sixthCol)
+    sixth_col = resized_image[3 : resized_image.shape[0] - 3, 310:360]
+    sixth_col = cv2.resize(sixth_col, (28, 28))
+    combined_images.append(sixth_col)
 
-    seventhCol = resized_image[3 : resized_image.shape[0] - 3, 370:-5]
-    combined_images.append(seventhCol)
+    seventh_col = resized_image[3 : resized_image.shape[0] - 3, 370:-5]
+    seventh_col = cv2.resize(seventh_col, (28, 28))
+    combined_images.append(seventh_col)
+    # cv2.imshow("wei", seventhCol)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     return combined_images
+
+def image_corruption_check(image_dir):
+    """This function will check if the image is corrupted or not.
+
+    Args:
+        image_dir (str): The path of the image directory
+    """    
+    
+     # Validate the directory path
+    if not os.path.isdir(image_dir):
+        error_detail = f"Invalid directory path: `{image_dir}`"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= error_detail)
+    
+    image_files = image_dir_to_array(image_dir)
+    for image_file in image_files: # type: ignore
+        try:
+            img = cv2.imread(os.path.join(image_dir, image_file))
+            dummy = img.shape  # this line will throw the exception
+        except:
+            logging.error(" Image is not available or corrupted.")
+            print(os.path.join(image_dir, image_file))
+    logging.info("Image corruption check completed.")
