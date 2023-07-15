@@ -4,3 +4,4 @@ cifar.ipynb
 __pycache__/
 output_csv
 .vscode
+dataset/

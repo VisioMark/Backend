@@ -21,7 +21,7 @@ def index_to_label(index: int):
     return shading.get(index, f"wrong index {index}")
 
 
-def make_predictions(shading_arr: np.ndarray, idx_num_arr: np.ndarray) -> Dict[int, str]:
+def make_predictions(shading_arr: np.ndarray, idx_num_arr: np.ndarray):
     shading_arr = np.apply_along_axis(lambda x: x/255, 1, shading_arr)
     # arr = np.apply_along_axis(lambda x: np.expand_dims(x, axis=0), 1, arr)
     # load the model
@@ -34,15 +34,16 @@ def make_predictions(shading_arr: np.ndarray, idx_num_arr: np.ndarray) -> Dict[i
     # predictions = shading_model.predict(np.expand_dims(arr/255, axis=0))
     shading_prediction = shading_model.predict(shading_arr)
     idx_num_prediction = idx_num_model.predict(idx_num_arr)
-    print(np.apply_along_axis(tf.argmax, 1, idx_num_prediction))
-    labels = process_predictions(shading_prediction)
-    return labels
+    labels, index_number = process_predictions(shading_prediction, idx_num_prediction)
+    return labels, index_number
 
-def process_predictions(predictions):
+def process_predictions(predictions, idx_predictions):
     # print(predictions)
     indices = np.apply_along_axis(tf.argmax, 1, predictions)
+    index_numbers = (np.apply_along_axis(tf.argmax, 1, idx_predictions))
+    index_numbers = np.array_str(index_numbers)
     labels = np.array(list(map(index_to_label, indices)))
-    return labels
+    return labels, index_numbers
 
 def mark_predictions(prediction: Dict[int, str],  master_key: Dict[str, str]) -> int: 
     count = 0

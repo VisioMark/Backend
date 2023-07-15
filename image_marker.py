@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from imutils.perspective import four_point_transform
 from helpers.utils import make_predictions, mark_predictions
 from helpers.__img_utils__ import load_diff_images_for_idx_no, load_diff_images_for_shading , get_n_columns, find_contours, get_all_cropped_index_number
-
+import multiprocessing
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 
@@ -27,13 +27,10 @@ class ImageMarker:
         Returns:
             Dict[int, str]: returns a dictionary of the file name, predictions and score
         """
-        diff_images = self.start_shading_processing()
-        question_data = self.get_questions_data(diff_images=diff_images)
-        
+        question_data = self.start_shading_processing()
         idx_diff_images = self.start_indx_processing()
-        index_number = self.get_index_no(diff_images=idx_diff_images)
         
-        predictions = make_predictions(shading_arr=question_data, idx_num_arr=index_number )
+        predictions, index_number = make_predictions(shading_arr=question_data, idx_num_arr=idx_diff_images)
         results = {
             id + 1: predicted_label for id, predicted_label in enumerate(predictions)
         }
@@ -41,8 +38,10 @@ class ImageMarker:
         accum_result = {
             "file_name": (self.image_path).split('/')[-1],
             'predictions': results,
-            "score": score
+            "score": score,
+            # "index_number": index_number
         }
+        print(index_number)
         return accum_result
     
     def start_shading_processing(self):
@@ -52,9 +51,9 @@ class ImageMarker:
             img, gray_img, canny_img: Original image, Grayscale image, Canny image
         """
         diff_images_for_shading = load_diff_images_for_shading(image_path=self.image_path, width=self.width, height=self.height)
+        question_data = self.get_questions_data(diff_images=diff_images_for_shading)        
         
-        
-        return diff_images_for_shading
+        return question_data
     
     def start_indx_processing(self):
         """This function starts the processing of the image
@@ -63,9 +62,10 @@ class ImageMarker:
             img, gray_img, canny_img: Original image, Grayscale image, Canny image
         """
         diff_images_for_idx = load_diff_images_for_idx_no(image_path=self.image_path, width=2550, height=3510)
+        index_number = self.get_index_no(diff_images=diff_images_for_idx)
         
         
-        return diff_images_for_idx
+        return index_number
     
     
     def process_image_for_shading(self,diff_images) -> np.ndarray:
