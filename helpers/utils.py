@@ -41,9 +41,11 @@ def process_predictions(predictions, idx_predictions):
     # print(predictions)
     indices = np.apply_along_axis(tf.argmax, 1, predictions)
     index_numbers = (np.apply_along_axis(tf.argmax, 1, idx_predictions))
-    index_numbers = np.array_str(index_numbers)
+    index_number = ''
+    for i in index_numbers:
+        index_number += str(i)
     labels = np.array(list(map(index_to_label, indices)))
-    return labels, index_numbers
+    return labels, index_number
 
 def mark_predictions(prediction: Dict[int, str],  master_key: Dict[str, str]) -> int: 
     count = 0

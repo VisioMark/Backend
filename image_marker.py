@@ -39,9 +39,8 @@ class ImageMarker:
             "file_name": (self.image_path).split('/')[-1],
             'predictions': results,
             "score": score,
-            # "index_number": index_number
+            "index_number": index_number
         }
-        print(index_number)
         return accum_result
     
     def start_shading_processing(self):
@@ -117,7 +116,7 @@ class ImageMarker:
         # view of the document
         paper = four_point_transform(img, doc_cnt.reshape(4, 2))
         warped = four_point_transform(gray_img, doc_cnt.reshape(4, 2))
-        
+       
         del gray_img, cnts, img_big_contour, doc_cnt, warped
 
         logging.info("Image preprocessing completed.")
@@ -153,11 +152,14 @@ class ImageMarker:
 
         # Crop the image based on the contour
         idxno_image = gray_img[y:y+h, x:x+w]
+        cv2.imshow("idxno_image", idxno_image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
 
         # REMOVE [n] PIXELS FORM EACH SIDE
         resized_image = idxno_image[80:155, 125:idxno_image.shape[1] - 4]
-        
+       
         combined_images = get_all_cropped_index_number(resized_image=resized_image)
         logging.info("Got the combined images.")
         imgs = [self.preprocess_idx_img(img) for img in combined_images]
